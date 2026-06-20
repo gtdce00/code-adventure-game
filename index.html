@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8" />
+  <title>ผจญภัยโค้ดจิ๋ว — โปโตรไทป์</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://unpkg.com/blockly/blockly.min.js"></script>
+</head>
+<body>
+  <header>
+    <h1>ผจญภัยโค้ดจิ๋ว</h1>
+    <div class="top-controls">
+      <label>ด่าน:
+        <select id="levelSelect"></select>
+      </label>
+      <button id="btnShowProgress">ความก้าวหน้า</button>
+    </div>
+  </header>
+
+  <main>
+    <section id="editor">
+      <div id="blocklyDiv"></div>
+      <div id="buttons">
+        <button id="runBtn">Run / รัน</button>
+        <button id="stepBtn">Step / ทีละคำสั่ง</button>
+        <button id="resetBtn">Reset / รีเซ็ต</button>
+        <div id="status">สถานะ: พร้อม</div>
+        <div id="scoreArea">ดาว: <span id="starsGot">0</span></div>
+        <div id="log" style="width:480px;height:120px;overflow:auto;border:1px solid #ddd;padding:6px;background:#fff"></div>
+      </div>
+    </section>
+
+    <section id="game">
+      <canvas id="gameCanvas" width="480" height="480" aria-label="พื้นที่เกม"></canvas>
+      <div id="hints">
+        <h3>คำแนะนำ</h3>
+        <div id="hintText">ลากบล็อกมาวาง แล้วกดรัน</div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <small>โปรโตไทป์ — ใช้เพื่อการเรียนรู้</small>
+  </footer>
+
+  <script src="levels.js"></script>
+  <script src="blocks.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
