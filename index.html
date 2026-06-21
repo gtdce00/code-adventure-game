@@ -2,7 +2,7 @@
 <html lang="th">
 <head>
   <meta charset="utf-8" />
-  <title>ผจญภัยโค้ดจิ๋ว — โปโตรไทป์</title>
+  <title>ผจญภัยโค้ดจิ๋ว — โปรโตไทป์</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <link rel="stylesheet" href="style.css" />
   <script src="https://unpkg.com/blockly/blockly.min.js"></script>
@@ -20,6 +20,16 @@
 
   <main>
     <section id="editor">
+      <!-- Toolbox (XML) - more reliable than JSON toolbox for many Blockly builds -->
+      <xml id="toolbox" style="display:none">
+        <block type="move_forward"></block>
+        <block type="turn_left"></block>
+        <block type="turn_right"></block>
+        <block type="jump"></block>
+        <block type="controls_repeat_ext"></block>
+        <block type="controls_if"></block>
+      </xml>
+
       <div id="blocklyDiv"></div>
       <div id="buttons">
         <button id="runBtn">Run / รัน</button>
@@ -32,7 +42,8 @@
     </section>
 
     <section id="game">
-      <canvas id="gameCanvas" width="480" height="480" aria-label="พื้นที่เกม"></canvas>
+      <!-- Make canvas attribute match CSS size to avoid scaling issues -->
+      <canvas id="gameCanvas" width="480" height="480" style="width:480px;height:480px" aria-label="พื้นที่เกม"></canvas>
       <div id="hints">
         <h3>คำแนะนำ</h3>
         <div id="hintText">ลากบล็อกมาวาง แล้วกดรัน</div>

@@ -1,4 +1,4 @@
-// app.js — game engine + integration with Blockly
+// app.js — game engine + integration with Blockly (fixed canvas init, toolbox XML, guards)
 let workspace;
 let currentLevel = 1;
 let hero = { x:0, y:0, dir:0 };
@@ -7,17 +7,28 @@ let canvas, ctx, cellSize;
 let running = false;
 let stepMode = false;
 let stepResolve = null;
+let levelData = null;
 
 function initBlockly(){
-  workspace = Blockly.inject('blocklyDiv', { toolbox: TOOLBOX, grid: { spacing:20, length:3, colour:'#ccc', snap:true } });
-  // load a default starter block
-  const xmlText = '<xml><block type="move_forward" x="10" y="10"><field name="STEPS">3</field></block></xml>';
-  const xml = Blockly.Xml.textToDom(xmlText);
-  Blockly.Xml.domToWorkspace(xml, workspace);
+  // Use toolbox DOM element (XML) — more compatible
+  const toolboxEl = document.getElementById('toolbox');
+  workspace = Blockly.inject('blocklyDiv', {
+    toolbox: toolboxEl,
+    grid: { spacing:20, length:3, colour:'#ccc', snap:true },
+    renderer: 'zelos'
+  });
+
+  // load a default starter block if workspace empty
+  if (workspace.getTopBlocks(false).length === 0) {
+    const xmlText = '<xml><block type="move_forward" x="10" y="10"><field name="STEPS">3</field></block></xml>';
+    const xml = Blockly.Xml.textToDom(xmlText);
+    Blockly.Xml.domToWorkspace(xml, workspace);
+  }
 }
 
 function initUI(){
   const levelSelect = document.getElementById('levelSelect');
+  if (!window.LEVELS) { console.error('LEVELS not found'); return; }
   LEVELS.forEach(l=>{
     const opt = document.createElement('option'); opt.value = l.id; opt.textContent = l.title; levelSelect.appendChild(opt);
   });
@@ -38,23 +49,39 @@ function initUI(){
 
 function initCanvas(){
   canvas = document.getElementById('gameCanvas');
+  if(!canvas){ console.error('Canvas not found'); return; }
+  // Make canvas pixel size match display size to avoid scaling issues
+  const rect = canvas.getBoundingClientRect();
+  // Only set if reasonable (avoid 0)
+  if (rect.width > 0 && rect.height > 0) {
+    canvas.width = Math.floor(rect.width);
+    canvas.height = Math.floor(rect.height);
+  }
   ctx = canvas.getContext('2d');
   cellSize = canvas.width / gridSize;
 }
 
 function loadLevel(id){
   const lvl = LEVELS.find(x=>x.id===id) || LEVELS[0];
+  if(!lvl){ console.error('loadLevel: level not found', id); return; }
   currentLevel = lvl.id;
   gridSize = lvl.gridSize || 8;
+  // clone hero initial position for this level
   hero = Object.assign({}, lvl.hero);
   levelData = JSON.parse(JSON.stringify(lvl));
+  // init canvas AFTER gridSize is set
   initCanvas();
   drawGrid();
   document.getElementById('starsGot').textContent = 0;
-  document.getElementById('status') && (document.getElementById('status').textContent = 'สถานะ: พร้อม');
+  const statusEl = document.getElementById('status');
+  if(statusEl) statusEl.textContent = 'สถานะ: พร้อม';
 }
 
 function drawGrid(){
+  if(!ctx) { console.warn('drawGrid: context not ready'); return; }
+  const lvl = LEVELS.find(x=>x.id===currentLevel);
+  if(!lvl){ console.error('drawGrid: level data missing for', currentLevel); return; }
+
   ctx.clearRect(0,0,canvas.width,canvas.height);
   const size = gridSize;
   cellSize = canvas.width / size;
@@ -65,14 +92,14 @@ function drawGrid(){
   }
   // draw goal
   ctx.fillStyle = 'gold';
-  const g = LEVELS.find(x=>x.id===currentLevel).goal;
-  ctx.fillRect(g.x*cellSize+8, g.y*cellSize+8, cellSize-16, cellSize-16);
+  const g = lvl.goal;
+  if(g) ctx.fillRect(g.x*cellSize+8, g.y*cellSize+8, cellSize-16, cellSize-16);
   // draw stars
-  const stars = LEVELS.find(x=>x.id===currentLevel).stars || [];
+  const stars = lvl.stars || [];
   ctx.fillStyle = '#ffdd57';
   stars.forEach(s=>{ ctx.beginPath(); ctx.arc(s.x*cellSize+cellSize/2, s.y*cellSize+cellSize/2, cellSize/6, 0, Math.PI*2); ctx.fill(); });
   // draw walls
-  const walls = LEVELS.find(x=>x.id===currentLevel).walls || [];
+  const walls = lvl.walls || [];
   ctx.fillStyle = '#333';
   walls.forEach(w=>{ ctx.fillRect(w.x*cellSize+2, w.y*cellSize+2, cellSize-4, cellSize-4); });
   // draw hero
@@ -80,24 +107,30 @@ function drawGrid(){
 }
 
 function drawHero(){
+  if(!ctx){ console.warn('drawHero: ctx missing'); return; }
+  // clamp hero to valid range
+  hero.x = Math.max(0, Math.min(gridSize - 1, Number(hero.x) || 0));
+  hero.y = Math.max(0, Math.min(gridSize - 1, Number(hero.y) || 0));
+  console.debug('drawHero', { hero, cellSize, gridSize });
   ctx.fillStyle = 'crimson';
-  const cx = hero.x*cellSize + cellSize/2;
-  const cy = hero.y*cellSize + cellSize/2;
-  ctx.beginPath(); ctx.arc(cx, cy, cellSize/3, 0, Math.PI*2); ctx.fill();
+  const cx = hero.x * cellSize + cellSize / 2;
+  const cy = hero.y * cellSize + cellSize / 2;
+  ctx.beginPath(); ctx.arc(cx, cy, Math.max(4, cellSize/3), 0, Math.PI*2); ctx.fill();
 }
 
 function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
-function log(msg){ const d=document.getElementById('log'); d.innerHTML += msg + '<br>'; d.scrollTop = d.scrollHeight; }
+function log(msg){ const d=document.getElementById('log'); if(d){ d.innerHTML += msg + '<br>'; d.scrollTop = d.scrollHeight; } else console.log(msg); }
 
 async function waitForStep(){ return new Promise(r=> stepResolve = r); }
 
 async function moveForward(n){
   log('moveForward ' + n);
+  const lvl = LEVELS.find(x=>x.id===currentLevel) || { walls:[] };
   for(let i=0;i<n;i++){
     if(stepMode) await waitForStep();
     const next = getNextPos(hero.x, hero.y, hero.dir);
     // handle walls
-    const walls = LEVELS.find(x=>x.id===currentLevel).walls || [];
+    const walls = lvl.walls || [];
     if(walls.some(w=>w.x===next.x && w.y===next.y)){
       log('ติดกำแพง ไม่สามารถเดินต่อได้'); break;
     }
@@ -117,20 +150,20 @@ async function jump(){ log('jump'); if(stepMode) await waitForStep(); const next
 
 function getNextPos(x,y,dir){ if(dir===0) return {x,y:y-1}; if(dir===1) return {x:x+1,y}; if(dir===2) return {x,y:y+1}; return {x:x-1,y}; }
 
-function checkStar(){ const lvl = LEVELS.find(x=>x.id===currentLevel); for(let i=0;i<lvl.stars.length;i++){ const s=lvl.stars[i]; if(s.x===hero.x && s.y===hero.y){ lvl.stars.splice(i,1); const cnt = Number(document.getElementById('starsGot').textContent)||0; document.getElementById('starsGot').textContent = cnt+1; log('เก็บดาว!'); break; } }}
-function checkGoal(){ const lvl = LEVELS.find(x=>x.id===currentLevel); if(hero.x===lvl.goal.x && hero.y===lvl.goal.y){ log('ถึงเป้าหมาย! ด่านสำเร็จ'); document.getElementById('status') && (document.getElementById('status').textContent = 'สถานะ: สำเร็จ'); }
+function checkStar(){ const lvl = LEVELS.find(x=>x.id===currentLevel); if(!lvl) return; for(let i=0;i<lvl.stars.length;i++){ const s=lvl.stars[i]; if(s.x===hero.x && s.y===hero.y){ lvl.stars.splice(i,1); const cnt = Number(document.getElementById('starsGot').textContent)||0; document.getElementById('starsGot').textContent = cnt+1; log('เก็บดาว!'); break; } }}
+function checkGoal(){ const lvl = LEVELS.find(x=>x.id===currentLevel); if(!lvl) return; if(hero.x===lvl.goal.x && hero.y===lvl.goal.y){ log('ถึงเป้าหมาย! ด่านสำเร็จ'); const statusEl = document.getElementById('status'); if(statusEl) statusEl.textContent = 'สถานะ: สำเร็จ'; }
 }
 
 async function runProgram(){
-  if(running) return; running = true; document.getElementById('status') && (document.getElementById('status').textContent = 'สถานะ: กำลังรัน');
+  if(running) return; running = true; const statusEl = document.getElementById('status'); if(statusEl) statusEl.textContent = 'สถานะ: กำลังรัน';
   try{
     const code = Blockly.JavaScript.workspaceToCode(workspace);
     log('--- รันโค้ด ---');
     const asyncFunc = new Function('moveForward','turnLeft','turnRight','jump','sleep','log', 'return (async function(){' + code + '})();');
     await asyncFunc(moveForward, turnLeft, turnRight, jump, sleep, log);
     log('--- จบการรัน ---');
-  }catch(e){ log('Error: ' + e); }
-  running = false; document.getElementById('status') && (document.getElementById('status').textContent = 'สถานะ: พร้อม');
+  }catch(e){ log('Error: ' + e); console.error(e); }
+  running = false; if(statusEl) statusEl.textContent = 'สถานะ: พร้อม';
 }
 
 // Init
