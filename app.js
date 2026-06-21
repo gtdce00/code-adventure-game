@@ -1,4 +1,4 @@
-// app.js — game engine + integration with Blockly (fixed canvas init, toolbox XML, guards)
+// app.js — game engine + integration with Blockly (add hero sprite preload and DPR scaling)
 let workspace;
 let currentLevel = 1;
 let hero = { x:0, y:0, dir:0 };
@@ -9,8 +9,15 @@ let stepMode = false;
 let stepResolve = null;
 let levelData = null;
 
+// HERO sprite preload
+const HERO_SPRITE_SRC = 'assets/hero.svg';
+let heroImg = new Image();
+let heroImgLoaded = false;
+heroImg.onload = () => { heroImgLoaded = true; console.log('hero image loaded'); drawGrid(); };
+heroImg.onerror = () => { heroImgLoaded = false; console.warn('hero image failed to load'); };
+heroImg.src = HERO_SPRITE_SRC;
+
 function initBlockly(){
-  // Use toolbox DOM element (XML) — more compatible
   const toolboxEl = document.getElementById('toolbox');
   workspace = Blockly.inject('blocklyDiv', {
     toolbox: toolboxEl,
@@ -18,7 +25,6 @@ function initBlockly(){
     renderer: 'zelos'
   });
 
-  // load a default starter block if workspace empty
   if (workspace.getTopBlocks(false).length === 0) {
     const xmlText = '<xml><block type="move_forward" x="10" y="10"><field name="STEPS">3</field></block></xml>';
     const xml = Blockly.Xml.textToDom(xmlText);
@@ -50,15 +56,21 @@ function initUI(){
 function initCanvas(){
   canvas = document.getElementById('gameCanvas');
   if(!canvas){ console.error('Canvas not found'); return; }
-  // Make canvas pixel size match display size to avoid scaling issues
   const rect = canvas.getBoundingClientRect();
-  // Only set if reasonable (avoid 0)
+  let dpr = window.devicePixelRatio || 1;
+  // set internal size to CSS size * DPR for crisp rendering
   if (rect.width > 0 && rect.height > 0) {
-    canvas.width = Math.floor(rect.width);
-    canvas.height = Math.floor(rect.height);
+    canvas.width = Math.max(1, Math.floor(rect.width * dpr));
+    canvas.height = Math.max(1, Math.floor(rect.height * dpr));
   }
+  // keep CSS display size
+  canvas.style.width = rect.width + 'px';
+  canvas.style.height = rect.height + 'px';
   ctx = canvas.getContext('2d');
-  cellSize = canvas.width / gridSize;
+  // reset transform and scale to DPR so drawing uses CSS pixels logically
+  ctx.setTransform(1,0,0,1,0,0);
+  ctx.scale(dpr, dpr);
+  cellSize = rect.width / gridSize;
 }
 
 function loadLevel(id){
@@ -66,10 +78,8 @@ function loadLevel(id){
   if(!lvl){ console.error('loadLevel: level not found', id); return; }
   currentLevel = lvl.id;
   gridSize = lvl.gridSize || 8;
-  // clone hero initial position for this level
   hero = Object.assign({}, lvl.hero);
   levelData = JSON.parse(JSON.stringify(lvl));
-  // init canvas AFTER gridSize is set
   initCanvas();
   drawGrid();
   document.getElementById('starsGot').textContent = 0;
@@ -82,13 +92,17 @@ function drawGrid(){
   const lvl = LEVELS.find(x=>x.id===currentLevel);
   if(!lvl){ console.error('drawGrid: level data missing for', currentLevel); return; }
 
-  ctx.clearRect(0,0,canvas.width,canvas.height);
+  // clear using CSS pixels (context is scaled)
+  const cssWidth = canvas.getBoundingClientRect().width;
+  const cssHeight = canvas.getBoundingClientRect().height;
+  ctx.clearRect(0,0,cssWidth,cssHeight);
+
   const size = gridSize;
-  cellSize = canvas.width / size;
+  cellSize = cssWidth / size;
   ctx.strokeStyle = '#bbb';
   for(let i=0;i<=size;i++){
-    ctx.beginPath(); ctx.moveTo(i*cellSize,0); ctx.lineTo(i*cellSize,canvas.height); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(0,i*cellSize); ctx.lineTo(canvas.width,i*cellSize); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(i*cellSize,0); ctx.lineTo(i*cellSize,cssHeight); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0,i*cellSize); ctx.lineTo(cssWidth,i*cellSize); ctx.stroke();
   }
   // draw goal
   ctx.fillStyle = 'gold';
@@ -108,14 +122,38 @@ function drawGrid(){
 
 function drawHero(){
   if(!ctx){ console.warn('drawHero: ctx missing'); return; }
-  // clamp hero to valid range
   hero.x = Math.max(0, Math.min(gridSize - 1, Number(hero.x) || 0));
   hero.y = Math.max(0, Math.min(gridSize - 1, Number(hero.y) || 0));
-  console.debug('drawHero', { hero, cellSize, gridSize });
-  ctx.fillStyle = 'crimson';
+  const cssWidth = canvas.getBoundingClientRect().width;
   const cx = hero.x * cellSize + cellSize / 2;
   const cy = hero.y * cellSize + cellSize / 2;
-  ctx.beginPath(); ctx.arc(cx, cy, Math.max(4, cellSize/3), 0, Math.PI*2); ctx.fill();
+  if(heroImgLoaded){
+    const drawW = Math.min(cellSize * 0.9, 64);
+    const drawH = drawW;
+    ctx.save();
+    const angle = hero.dir * (Math.PI / 2);
+    ctx.translate(cx, cy);
+    ctx.rotate(angle);
+    ctx.drawImage(heroImg, -drawW/2, -drawH/2, drawW, drawH);
+    ctx.restore();
+  } else {
+    // fallback circle
+    ctx.fillStyle = 'crimson';
+    ctx.beginPath();
+    ctx.arc(cx, cy, Math.max(6, cellSize/3), 0, Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle = 'white';
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(hero.dir * (Math.PI/2));
+    ctx.beginPath();
+    ctx.moveTo(0, -cellSize/4);
+    ctx.lineTo(cellSize/8, cellSize/8);
+    ctx.lineTo(-cellSize/8, cellSize/8);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
 }
 
 function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
@@ -129,12 +167,10 @@ async function moveForward(n){
   for(let i=0;i<n;i++){
     if(stepMode) await waitForStep();
     const next = getNextPos(hero.x, hero.y, hero.dir);
-    // handle walls
     const walls = lvl.walls || [];
     if(walls.some(w=>w.x===next.x && w.y===next.y)){
       log('ติดกำแพง ไม่สามารถเดินต่อได้'); break;
     }
-    // bounds
     hero.x = Math.max(0, Math.min(gridSize-1, next.x));
     hero.y = Math.max(0, Math.min(gridSize-1, next.y));
     drawGrid();
@@ -166,7 +202,6 @@ async function runProgram(){
   running = false; if(statusEl) statusEl.textContent = 'สถานะ: พร้อม';
 }
 
-// Init
 window.addEventListener('load', ()=>{
   initBlockly();
   initUI();

@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Simple SVG placeholder hero: cute round robot -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="g" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0" stop-color="#ff7b7b"/>
+      <stop offset="1" stop-color="#ff4d4d"/>
+    </linearGradient>
+  </defs>
+  <rect width="128" height="128" rx="20" fill="#f6f9ff" />
+  <g transform="translate(20,18)">
+    <circle cx="44" cy="44" r="36" fill="url(#g)"/>
+    <rect x="22" y="62" width="44" height="10" rx="5" fill="#fff" opacity="0.15"/>
+    <circle cx="32" cy="36" r="6" fill="#fff"/>
+    <circle cx="56" cy="36" r="6" fill="#fff"/>
+    <circle cx="32" cy="36" r="3" fill="#333"/>
+    <circle cx="56" cy="36" r="3" fill="#333"/>
+    <rect x="40" y="48" width="8" height="10" rx="4" fill="#fff" opacity="0.2"/>
+  </g>
+</svg>
