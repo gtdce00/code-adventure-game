@@ -1,4 +1,4 @@
-// app.js — game engine + integration with Blockly (add hero sprite preload and DPR scaling)
+// app.js — game engine + integration with Blockly (support multiple characters)
 let workspace;
 let currentLevel = 1;
 let hero = { x:0, y:0, dir:0 };
@@ -9,13 +9,20 @@ let stepMode = false;
 let stepResolve = null;
 let levelData = null;
 
-// HERO sprite preload
-const HERO_SPRITE_SRC = 'assets/hero.svg';
-let heroImg = new Image();
-let heroImgLoaded = false;
-heroImg.onload = () => { heroImgLoaded = true; console.log('hero image loaded'); drawGrid(); };
-heroImg.onerror = () => { heroImgLoaded = false; console.warn('hero image failed to load'); };
-heroImg.src = HERO_SPRITE_SRC;
+// Sprite catalog
+const SPRITES = {
+  robot: { src: 'assets/hero.svg', img: new Image(), loaded: false, name: 'หุ่นยนต์' },
+  alien: { src: 'assets/hero2.svg', img: new Image(), loaded: false, name: 'เอเลี่ยน' }
+};
+let selectedSpriteKey = 'robot';
+
+// preload sprites
+Object.keys(SPRITES).forEach(k => {
+  const s = SPRITES[k];
+  s.img.onload = () => { s.loaded = true; console.log('sprite loaded:', k); drawGrid(); };
+  s.img.onerror = () => { s.loaded = false; console.warn('sprite failed to load:', k); };
+  s.img.src = s.src;
+});
 
 function initBlockly(){
   const toolboxEl = document.getElementById('toolbox');
@@ -34,6 +41,7 @@ function initBlockly(){
 
 function initUI(){
   const levelSelect = document.getElementById('levelSelect');
+  const charSelect = document.getElementById('characterSelect');
   if (!window.LEVELS) { console.error('LEVELS not found'); return; }
   LEVELS.forEach(l=>{
     const opt = document.createElement('option'); opt.value = l.id; opt.textContent = l.title; levelSelect.appendChild(opt);
@@ -41,6 +49,13 @@ function initUI(){
   levelSelect.addEventListener('change', e=>{
     loadLevel(Number(e.target.value));
   });
+
+  // populate character select
+  Object.keys(SPRITES).forEach(k => {
+    const opt = document.createElement('option'); opt.value = k; opt.textContent = SPRITES[k].name; charSelect.appendChild(opt);
+  });
+  charSelect.value = selectedSpriteKey;
+  charSelect.addEventListener('change', e => { selectedSpriteKey = e.target.value; drawGrid(); });
 
   document.getElementById('runBtn').addEventListener('click', async ()=>{
     stepMode = false; await runProgram();
@@ -58,16 +73,13 @@ function initCanvas(){
   if(!canvas){ console.error('Canvas not found'); return; }
   const rect = canvas.getBoundingClientRect();
   let dpr = window.devicePixelRatio || 1;
-  // set internal size to CSS size * DPR for crisp rendering
   if (rect.width > 0 && rect.height > 0) {
     canvas.width = Math.max(1, Math.floor(rect.width * dpr));
     canvas.height = Math.max(1, Math.floor(rect.height * dpr));
   }
-  // keep CSS display size
   canvas.style.width = rect.width + 'px';
   canvas.style.height = rect.height + 'px';
   ctx = canvas.getContext('2d');
-  // reset transform and scale to DPR so drawing uses CSS pixels logically
   ctx.setTransform(1,0,0,1,0,0);
   ctx.scale(dpr, dpr);
   cellSize = rect.width / gridSize;
@@ -92,7 +104,6 @@ function drawGrid(){
   const lvl = LEVELS.find(x=>x.id===currentLevel);
   if(!lvl){ console.error('drawGrid: level data missing for', currentLevel); return; }
 
-  // clear using CSS pixels (context is scaled)
   const cssWidth = canvas.getBoundingClientRect().width;
   const cssHeight = canvas.getBoundingClientRect().height;
   ctx.clearRect(0,0,cssWidth,cssHeight);
@@ -116,7 +127,7 @@ function drawGrid(){
   const walls = lvl.walls || [];
   ctx.fillStyle = '#333';
   walls.forEach(w=>{ ctx.fillRect(w.x*cellSize+2, w.y*cellSize+2, cellSize-4, cellSize-4); });
-  // draw hero
+  // draw hero (selected sprite)
   drawHero();
 }
 
@@ -124,20 +135,19 @@ function drawHero(){
   if(!ctx){ console.warn('drawHero: ctx missing'); return; }
   hero.x = Math.max(0, Math.min(gridSize - 1, Number(hero.x) || 0));
   hero.y = Math.max(0, Math.min(gridSize - 1, Number(hero.y) || 0));
-  const cssWidth = canvas.getBoundingClientRect().width;
   const cx = hero.x * cellSize + cellSize / 2;
   const cy = hero.y * cellSize + cellSize / 2;
-  if(heroImgLoaded){
+  const sprite = SPRITES[selectedSpriteKey];
+  if(sprite && sprite.loaded){
     const drawW = Math.min(cellSize * 0.9, 64);
     const drawH = drawW;
     ctx.save();
     const angle = hero.dir * (Math.PI / 2);
     ctx.translate(cx, cy);
     ctx.rotate(angle);
-    ctx.drawImage(heroImg, -drawW/2, -drawH/2, drawW, drawH);
+    ctx.drawImage(sprite.img, -drawW/2, -drawH/2, drawW, drawH);
     ctx.restore();
   } else {
-    // fallback circle
     ctx.fillStyle = 'crimson';
     ctx.beginPath();
     ctx.arc(cx, cy, Math.max(6, cellSize/3), 0, Math.PI*2);

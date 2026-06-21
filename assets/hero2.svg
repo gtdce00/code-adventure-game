@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Second SVG character: green alien placeholder -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="ga" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0" stop-color="#7efc8d"/>
+      <stop offset="1" stop-color="#2ecc71"/>
+    </linearGradient>
+  </defs>
+  <rect width="128" height="128" rx="20" fill="#f6fff6" />
+  <g transform="translate(20,18)">
+    <ellipse cx="44" cy="44" rx="36" ry="32" fill="url(#ga)"/>
+    <circle cx="30" cy="36" r="6" fill="#fff"/>
+    <circle cx="58" cy="36" r="6" fill="#fff"/>
+    <circle cx="30" cy="36" r="3" fill="#063"/>
+    <circle cx="58" cy="36" r="3" fill="#063"/>
+    <rect x="26" y="62" width="36" height="10" rx="5" fill="#fff" opacity="0.12"/>
+  </g>
+</svg>
